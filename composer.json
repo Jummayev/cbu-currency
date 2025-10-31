@@ -1,5 +1,5 @@
 {
-    "name": "Jummayev/cbu-currency",
+    "name": "cbu/currency",
     "description": "Central Bank of Uzbekistan currency rates package for Laravel",
     "type": "library",
     "license": "MIT",
