@@ -2,11 +2,13 @@
 
 namespace Cbu\Currency\Services;
 
+use Cbu\Currency\DTOs\CurrencyRateDto;
 use Cbu\Currency\Exceptions\CbuApiException;
 use Cbu\Currency\Models\Currency;
 use Cbu\Currency\Models\CurrencyRate;
 use DateTime;
 use Exception;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 
 class CbuApiService
@@ -150,10 +152,10 @@ class CbuApiService
      *
      * @param string $currencyCode Currency code (e.g., USD, EUR)
      * @param string $date Date in Y-m-d format
-     * @return array|null
+     * @return CurrencyRateDto
      * @throws CbuApiException
      */
-    public function fetchRateFromApi(string $currencyCode, string $date): ?array
+    public function fetchRateFromApi(string $currencyCode, string $date): CurrencyRateDto
     {
         $this->isValidDate($date);
         $url = "{$this->baseUrl}/all/{$date}/";
@@ -162,52 +164,31 @@ class CbuApiService
 
         foreach ($data as $item) {
             if (strtoupper($item['Ccy']) === strtoupper($currencyCode)) {
-                return [
-                    'ccy' => $item['Ccy'],
-                    'rate' => $item['Rate'],
-                    'diff' => $item['Diff'],
-                    'nominal' => $item['Nominal'],
-                    'date' => $date,
-                    'currency_date' => $item['Date'],
-                    'name_en' => $item['CcyNm_EN'] ?? '',
-                    'name_uz' => $item['CcyNm_UZ'] ?? '',
-                    'name_oz' => $item['CcyNm_UZC'] ?? '',
-                    'name_ru' => $item['CcyNm_RU'] ?? '',
-                ];
+                return CurrencyRateDto::setDataFromApi($item);
             }
         }
 
-        return null;
+        return throw CbuApiException::rateNotFound($currencyCode, $date);
     }
 
     /**
      * Fetch all rates from CBU API without storing
      *
      * @param string $date Date in Y-m-d format
-     * @return array
+     * @return Collection
      * @throws CbuApiException
      */
-    public function fetchAllRatesFromApi(string $date): array
+    public function fetchAllRatesFromApi(string $date): Collection
     {
         $this->isValidDate($date);
         $url = "{$this->baseUrl}/all/{$date}/";
 
         $data = $this->fetchFromApi($url);
 
-        return array_map(function ($item) use ($date) {
-            return [
-                'ccy' => $item['Ccy'],
-                'rate' => $item['Rate'],
-                'diff' => $item['Diff'],
-                'nominal' => $item['Nominal'],
-                'date' => $date,
-                'currency_date' => $item['Date'],
-                'name_en' => $item['CcyNm_EN'] ?? '',
-                'name_uz' => $item['CcyNm_UZ'] ?? '',
-                'name_oz' => $item['CcyNm_UZC'] ?? '',
-                'name_ru' => $item['CcyNm_RU'] ?? '',
-            ];
-        }, $data);
+        return collect(array_map(function ($item) use ($date) {
+            $item['date'] = $date;
+            return CurrencyRateDto::setDataFromApi($item);
+        }, $data));
     }
 
     protected function isValidDate(string $date): void

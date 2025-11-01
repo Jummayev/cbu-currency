@@ -24,4 +24,9 @@ class CbuApiException extends Exception
     {
         return new self("Invalid date format. Please use Y-m-d format (e.g., $date) or $message");
     }
+
+    public static function rateNotFound(string $currencyCode, string $date): self
+    {
+        return new self("Rate not found for currency {$currencyCode} on {$date}");
+    }
 }

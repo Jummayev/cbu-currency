@@ -4,9 +4,12 @@ namespace Cbu\Currency;
 
 use Cbu\Currency\DTOs\ConversionResultDto;
 use Cbu\Currency\DTOs\CurrencyRateDto;
-use Cbu\Currency\Models\Currency;
+use Cbu\Currency\Enums\CurrencyCode;
+use Cbu\Currency\Enums\CurrencySource;
+use Cbu\Currency\Exceptions\CbuApiException;
 use Cbu\Currency\Models\CurrencyRate;
 use Cbu\Currency\Services\CbuApiService;
+use Illuminate\Support\Collection;
 
 class CbuCurrency
 {
@@ -22,13 +25,28 @@ class CbuCurrency
     }
 
     /**
+     * Set the data source for currency operations
+     *
+     * @param CurrencySource $source
+     * @return self
+     */
+    public function source(CurrencySource $source): self
+    {
+        $sourceValue = $source->value;
+        $instance = clone $this;
+        $instance->source = $sourceValue;
+        return $instance;
+    }
+
+    /**
      * Get currency rate by code and date
      *
-     * @param string $currencyCode Currency code (e.g., USD, EUR)
+     * @param CurrencyCode|string $currencyCode Currency code (e.g., USD, EUR)
      * @param string|null $date Date in Y-m-d format, null for today
-     * @return CurrencyRateDto|null
+     * @return CurrencyRateDto
+     * @throws CbuApiException
      */
-    public function getRate(string $currencyCode, ?string $date = null): ?CurrencyRateDto
+    public function getRate(CurrencyCode|string $currencyCode, ?string $date = null): CurrencyRateDto
     {
         $date = $date ?? now()->format('Y-m-d');
 
@@ -44,11 +62,12 @@ class CbuCurrency
     /**
      * Get currency rate from database
      *
-     * @param string $currencyCode Currency code
+     * @param CurrencyCode|string $currencyCode Currency code
      * @param string $date Date in Y-m-d format
      * @return CurrencyRateDto|null
+     * @throws CbuApiException
      */
-    protected function getRateFromDatabase(string $currencyCode, string $date): ?CurrencyRateDto
+    protected function getRateFromDatabase(CurrencyCode|string $currencyCode, string $date): ?CurrencyRateDto
     {
         $currencyRate = CurrencyRate::query()
             ->whereHas('currency', function ($query) use ($currencyCode) {
@@ -59,59 +78,48 @@ class CbuCurrency
             ->first();
 
         if (!$currencyRate) {
-            return null;
+            $this->apiService->fetchAndStore($date);
+            $currencyRate = CurrencyRate::query()
+                ->whereHas('currency', function ($query) use ($currencyCode) {
+                    $query->where('ccy', strtoupper($currencyCode));
+                })
+                ->where('date', $date)
+                ->with('currency')
+                ->first();
         }
 
-        return new CurrencyRateDto(
-            currencyCode: $currencyRate->currency->ccy,
-            currencyName: $currencyRate->currency->name_en,
-            rate: (float) $currencyRate->rate,
-            diff: (float) $currencyRate->diff,
-            nominal: $currencyRate->nominal,
-            date: $currencyRate->date->format('Y-m-d'),
-        );
+
+        if (!$currencyRate) {
+            throw new CbuApiException("Rate not found for currency $currencyCode on $date");
+        }
+
+        return CurrencyRateDto::setDataFromModel($currencyRate);
     }
 
     /**
      * Get currency rate from CBU API
      *
-     * @param string $currencyCode Currency code
+     * @param CurrencyCode|string $currencyCode Currency code
      * @param string $date Date in Y-m-d format
-     * @return CurrencyRateDto|null
+     * @return CurrencyRateDto
+     * @throws CbuApiException
      */
-    protected function getRateFromApi(string $currencyCode, string $date): ?CurrencyRateDto
+    protected function getRateFromApi(CurrencyCode|string $currencyCode, string $date): CurrencyRateDto
     {
-        try {
-            $rateData = $this->apiService->fetchRateFromApi($currencyCode, $date);
-
-            if (!$rateData) {
-                return null;
-            }
-
-            return new CurrencyRateDto(
-                currencyCode: $rateData['ccy'],
-                currencyName: $rateData['name_en'],
-                rate: (float) $rateData['rate'],
-                diff: (float) $rateData['diff'],
-                nominal: $rateData['nominal'],
-                date: $rateData['date'],
-            );
-        } catch (\Exception $e) {
-            // Return null if API request fails
-            return null;
-        }
+        return $this->apiService->fetchRateFromApi($currencyCode, $date);
     }
 
     /**
      * Convert from one currency to another
      *
-     * @param string $fromCurrency Source currency code
-     * @param string $toCurrency Target currency code
+     * @param CurrencyCode|string $fromCurrency Source currency code
+     * @param CurrencyCode|string $toCurrency Target currency code
      * @param float $amount Amount to convert
      * @param string|null $date Date in Y-m-d format, null for today
      * @return ConversionResultDto|null
+     * @throws CbuApiException
      */
-    public function convert(string $fromCurrency, string $toCurrency, float $amount, ?string $date = null): ?ConversionResultDto
+    public function convert(CurrencyCode|string $fromCurrency, CurrencyCode|string $toCurrency, float $amount, ?string $date = null): ?ConversionResultDto
     {
         $date = $date ?? now()->format('Y-m-d');
         $fromCurrency = strtoupper($fromCurrency);
@@ -120,15 +128,13 @@ class CbuCurrency
         // If same currency, return same amount
         if ($fromCurrency === $toCurrency) {
             $rate = null;
-            $amountInUzsValue = (string) $amount;
+            $amountInUzsValue = (string)$amount;
 
             // If not UZS, get the rate
             if ($fromCurrency !== 'UZS') {
                 $rateDto = $this->getRate($fromCurrency, $date);
-                if ($rateDto) {
-                    $rate = $rateDto->rate;
-                    $amountInUzsValue = bcmul((string) $amount, (string) $rate, $this->scale);
-                }
+                $rate = $rateDto->rate;
+                $amountInUzsValue = bcmul((string)$amount, (string)$rate, $this->scale);
             }
 
             return new ConversionResultDto(
@@ -138,7 +144,7 @@ class CbuCurrency
                 result: $amount,
                 fromRate: $rate,
                 toRate: $rate,
-                amountInUzs: (float) $amountInUzsValue,
+                amountInUzs: (float)$amountInUzsValue,
                 date: $date,
             );
         }
@@ -157,54 +163,49 @@ class CbuCurrency
         $fromRateDto = $this->getRate($fromCurrency, $date);
         $toRateDto = $this->getRate($toCurrency, $date);
 
-        if (!$fromRateDto || !$toRateDto) {
-            return null;
-        }
-
-        $amountInUzs = bcmul((string) $amount, (string) $fromRateDto->rate, $this->scale);
-        $result = bcdiv($amountInUzs, (string) $toRateDto->rate, $this->scale);
+        $amountInUzs = bcmul((string)$amount, (string)$fromRateDto->rate, $this->scale);
+        $result = bcdiv($amountInUzs, (string)$toRateDto->rate, $this->scale);
 
         return new ConversionResultDto(
             amount: $amount,
             fromCurrency: $fromCurrency,
             toCurrency: $toCurrency,
-            result: (float) $result,
+            result: (float)$result,
             fromRate: $fromRateDto->rate,
             toRate: $toRateDto->rate,
-            amountInUzs: (float) $amountInUzs,
+            amountInUzs: (float)$amountInUzs,
             date: $date,
         );
     }
 
     /**
+     *
      * Convert from foreign currency to UZS
      *
-     * @param string $currencyCode Source currency code
+     * @param CurrencyCode|string $currencyCode
      * @param float $amount Amount in foreign currency
      * @param string|null $date Date in Y-m-d format, null for today
-     * @return ConversionResultDto|null
+     * @return ConversionResultDto
+     * @throws CbuApiException
+     * @throws CbuApiException
      */
-    public function toUzs(string $currencyCode, float $amount, ?string $date = null): ?ConversionResultDto
+    public function toUzs(CurrencyCode|string $currencyCode, float $amount, ?string $date = null): ConversionResultDto
     {
         $date = $date ?? now()->format('Y-m-d');
         $currencyCode = strtoupper($currencyCode);
 
         $rateDto = $this->getRate($currencyCode, $date);
 
-        if (!$rateDto) {
-            return null;
-        }
-
-        $result = bcmul((string) $amount, (string) $rateDto->rate, $this->scale);
+        $result = bcmul((string)$amount, (string)$rateDto->rate, $this->scale);
 
         return new ConversionResultDto(
             amount: $amount,
             fromCurrency: $currencyCode,
             toCurrency: 'UZS',
-            result: (float) $result,
+            result: (float)$result,
             fromRate: $rateDto->rate,
             toRate: null,
-            amountInUzs: (float) $result,
+            amountInUzs: (float)$result,
             date: $date,
         );
     }
@@ -212,29 +213,26 @@ class CbuCurrency
     /**
      * Convert from UZS to foreign currency
      *
-     * @param string $currencyCode Target currency code
+     * @param CurrencyCode|string $currencyCode Target currency code
      * @param float $amount Amount in UZS
      * @param string|null $date Date in Y-m-d format, null for today
-     * @return ConversionResultDto|null
+     * @return ConversionResultDto
+     * @throws CbuApiException
      */
-    public function fromUzs(string $currencyCode, float $amount, ?string $date = null): ?ConversionResultDto
+    public function fromUzs(CurrencyCode|string $currencyCode, float $amount, ?string $date = null): ConversionResultDto
     {
         $date = $date ?? now()->format('Y-m-d');
         $currencyCode = strtoupper($currencyCode);
 
         $rateDto = $this->getRate($currencyCode, $date);
 
-        if (!$rateDto) {
-            return null;
-        }
-
-        $result = bcdiv((string) $amount, (string) $rateDto->rate, $this->scale);
+        $result = bcdiv((string)$amount, (string)$rateDto->rate, $this->scale);
 
         return new ConversionResultDto(
             amount: $amount,
             fromCurrency: 'UZS',
             toCurrency: $currencyCode,
-            result: (float) $result,
+            result: (float)$result,
             fromRate: null,
             toRate: $rateDto->rate,
             amountInUzs: $amount,
@@ -246,9 +244,10 @@ class CbuCurrency
      * Get all currency rates for a specific date
      *
      * @param string|null $date Date in Y-m-d format, null for today
-     * @return array<CurrencyRateDto>
+     * @return Collection
+     * @throws CbuApiException
      */
-    public function getAllRates(?string $date = null): array
+    public function getAllRates(?string $date = null): Collection
     {
         $date = $date ?? now()->format('Y-m-d');
 
@@ -265,9 +264,8 @@ class CbuCurrency
      * Get all currency rates from database
      *
      * @param string $date Date in Y-m-d format
-     * @return array<CurrencyRateDto>
      */
-    protected function getAllRatesFromDatabase(string $date): array
+    protected function getAllRatesFromDatabase(string $date): Collection
     {
         $rates = CurrencyRate::query()
             ->where('date', $date)
@@ -275,41 +273,19 @@ class CbuCurrency
             ->get();
 
         return $rates->map(function (CurrencyRate $rate) {
-            return new CurrencyRateDto(
-                currencyCode: $rate->currency->ccy,
-                currencyName: $rate->currency->name_en,
-                rate: (float) $rate->rate,
-                diff: (float) $rate->diff,
-                nominal: $rate->nominal,
-                date: $rate->date->format('Y-m-d'),
-            );
-        })->toArray();
+            return CurrencyRateDto::setDataFromModel($rate);
+        });
     }
 
     /**
      * Get all currency rates from CBU API
      *
      * @param string $date Date in Y-m-d format
-     * @return array<CurrencyRateDto>
+     * @return Collection
+     * @throws CbuApiException
      */
-    protected function getAllRatesFromApi(string $date): array
+    protected function getAllRatesFromApi(string $date): Collection
     {
-        try {
-            $ratesData = $this->apiService->fetchAllRatesFromApi($date);
-
-            return array_map(function ($rateData) {
-                return new CurrencyRateDto(
-                    currencyCode: $rateData['ccy'],
-                    currencyName: $rateData['name_en'],
-                    rate: (float) $rateData['rate'],
-                    diff: (float) $rateData['diff'],
-                    nominal: $rateData['nominal'],
-                    date: $rateData['date'],
-                );
-            }, $ratesData);
-        } catch (\Exception $e) {
-            // Return empty array if API request fails
-            return [];
-        }
+        return $this->apiService->fetchAllRatesFromApi($date);
     }
 }
