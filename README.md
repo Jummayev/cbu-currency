@@ -100,6 +100,29 @@ CBU_SOURCE=api
 
 ## Usage
 
+### Using Enums (Type-Safe)
+
+The package supports ISO 4217 currency codes and source types as enums:
+
+```php
+use Cbu\Currency\Facades\CbuCurrency;
+use Cbu\Currency\Enums\CurrencyCode;
+use Cbu\Currency\Enums\SourceType;
+
+// Get rate using enum
+$rate = CbuCurrency::getRate(CurrencyCode::USD);
+
+// Convert using enums
+$result = CbuCurrency::convert(CurrencyCode::USD, CurrencyCode::EUR, 100);
+
+// Change data source dynamically with method chaining
+$rate = CbuCurrency::source(SourceType::API)->getRate(CurrencyCode::USD);
+$result = CbuCurrency::source('database')->convert(CurrencyCode::USD, CurrencyCode::EUR, 100);
+
+// Mix enum and string parameters
+$result = CbuCurrency::source(SourceType::API)->convert('USD', CurrencyCode::EUR, 100);
+```
+
 ### Artisan Commands
 
 #### Sync Currencies

@@ -100,6 +100,29 @@ CBU_SOURCE=api
 
 ## Foydalanish
 
+### Enum'lardan Foydalanish (Type-Safe)
+
+Paket ISO 4217 valyuta kodlari va manba turlarini enum sifatida qo'llab-quvvatlaydi:
+
+```php
+use Cbu\Currency\Facades\CbuCurrency;
+use Cbu\Currency\Enums\CurrencyCode;
+use Cbu\Currency\Enums\SourceType;
+
+// Enum bilan kursni olish
+$rate = CbuCurrency::getRate(CurrencyCode::USD);
+
+// Enum'lar bilan konvertatsiya
+$result = CbuCurrency::convert(CurrencyCode::USD, CurrencyCode::EUR, 100);
+
+// Ma'lumot manbaini dinamik ravishda o'zgartirish (method chaining)
+$rate = CbuCurrency::source(SourceType::API)->getRate(CurrencyCode::USD);
+$result = CbuCurrency::source('database')->convert(CurrencyCode::USD, CurrencyCode::EUR, 100);
+
+// Enum va string parametrlarni aralashtirish
+$result = CbuCurrency::source(SourceType::API)->convert('USD', CurrencyCode::EUR, 100);
+```
+
 ### Artisan Komandalar
 
 #### Valyutalarni Sinxronizatsiya Qilish

@@ -50,6 +50,10 @@ return [
     | - 'database': Fetch rates from local database (default, faster)
     | - 'api': Fetch rates directly from CBU API (live data, slower)
     |
+    | You can also change source dynamically using:
+    | CbuCurrency::source('api')->getRate('USD')
+    | CbuCurrency::source(SourceType::DATABASE)->convert('USD', 'EUR', 100)
+    |
     */
     'source' => env('CBU_SOURCE', 'database'),
 ];
