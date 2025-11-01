@@ -62,6 +62,9 @@ return [
 
     // BCMath hisob-kitob aniqligi (o'nlik xonalar)
     'scale' => env('CBU_SCALE', 2),
+
+    // Ma'lumot manbai: 'database' yoki 'api'
+    'source' => env('CBU_SOURCE', 'database'),
 ];
 ```
 
@@ -74,6 +77,25 @@ CBU_BASE_URL=https://cbu.uz/ru/arkhiv-kursov-valyut/json
 CBU_CACHE_DURATION=60
 CBU_DEFAULT_CURRENCY=USD
 CBU_SCALE=2
+CBU_SOURCE=database
+```
+
+#### Ma'lumot Manbai Konfiguratsiyasi
+
+`CBU_SOURCE` o'zgaruvchisi valyuta kurslarini qayerdan olishni belgilaydi:
+
+- **`database`** (standart): Kurslarni lokal ma'lumotlar bazasidan oladi. Bu tezroq ishlaydi va dastlabki sinxronizatsiyadan keyin offline rejimda ham ishlaydi. Ma'lumotlar bazasini to'ldirish uchun `php artisan cbu:fetch-rates` ni ishga tushirish kerak.
+
+- **`api`**: Kurslarni to'g'ridan-to'g'ri CBU API'dan real vaqt rejimida oladi. Bu har doim yangi ma'lumotlarni beradi, lekin sekinroq ishlaydi va har bir so'rov uchun internet aloqasi talab qilinadi.
+
+**Foydalanish misoli:**
+
+```env
+# Ma'lumotlar bazasidan foydalanish (production uchun tavsiya etiladi)
+CBU_SOURCE=database
+
+# Jonli API dan foydalanish (har doim yangi ma'lumot olish uchun foydali)
+CBU_SOURCE=api
 ```
 
 ## Foydalanish

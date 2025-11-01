@@ -145,6 +145,71 @@ class CbuApiService
         }
     }
 
+    /**
+     * Fetch rate for a specific currency from CBU API without storing
+     *
+     * @param string $currencyCode Currency code (e.g., USD, EUR)
+     * @param string $date Date in Y-m-d format
+     * @return array|null
+     * @throws CbuApiException
+     */
+    public function fetchRateFromApi(string $currencyCode, string $date): ?array
+    {
+        $this->isValidDate($date);
+        $url = "{$this->baseUrl}/all/{$date}/";
+
+        $data = $this->fetchFromApi($url);
+
+        foreach ($data as $item) {
+            if (strtoupper($item['Ccy']) === strtoupper($currencyCode)) {
+                return [
+                    'ccy' => $item['Ccy'],
+                    'rate' => $item['Rate'],
+                    'diff' => $item['Diff'],
+                    'nominal' => $item['Nominal'],
+                    'date' => $date,
+                    'currency_date' => $item['Date'],
+                    'name_en' => $item['CcyNm_EN'] ?? '',
+                    'name_uz' => $item['CcyNm_UZ'] ?? '',
+                    'name_oz' => $item['CcyNm_UZC'] ?? '',
+                    'name_ru' => $item['CcyNm_RU'] ?? '',
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetch all rates from CBU API without storing
+     *
+     * @param string $date Date in Y-m-d format
+     * @return array
+     * @throws CbuApiException
+     */
+    public function fetchAllRatesFromApi(string $date): array
+    {
+        $this->isValidDate($date);
+        $url = "{$this->baseUrl}/all/{$date}/";
+
+        $data = $this->fetchFromApi($url);
+
+        return array_map(function ($item) use ($date) {
+            return [
+                'ccy' => $item['Ccy'],
+                'rate' => $item['Rate'],
+                'diff' => $item['Diff'],
+                'nominal' => $item['Nominal'],
+                'date' => $date,
+                'currency_date' => $item['Date'],
+                'name_en' => $item['CcyNm_EN'] ?? '',
+                'name_uz' => $item['CcyNm_UZ'] ?? '',
+                'name_oz' => $item['CcyNm_UZC'] ?? '',
+                'name_ru' => $item['CcyNm_RU'] ?? '',
+            ];
+        }, $data);
+    }
+
     protected function isValidDate(string $date): void
     {
         try {

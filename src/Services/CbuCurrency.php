@@ -6,14 +6,19 @@ use Cbu\Currency\DTOs\ConversionResultDto;
 use Cbu\Currency\DTOs\CurrencyRateDto;
 use Cbu\Currency\Models\Currency;
 use Cbu\Currency\Models\CurrencyRate;
+use Cbu\Currency\Services\CbuApiService;
 
 class CbuCurrency
 {
     protected int $scale;
+    protected string $source;
+    protected CbuApiService $apiService;
 
-    public function __construct()
+    public function __construct(CbuApiService $apiService)
     {
         $this->scale = config('cbu-currency.scale', 2);
+        $this->source = config('cbu-currency.source', 'database');
+        $this->apiService = $apiService;
     }
 
     /**
@@ -27,6 +32,24 @@ class CbuCurrency
     {
         $date = $date ?? now()->format('Y-m-d');
 
+        // Fetch from API if source is 'api'
+        if ($this->source === 'api') {
+            return $this->getRateFromApi($currencyCode, $date);
+        }
+
+        // Otherwise, fetch from database
+        return $this->getRateFromDatabase($currencyCode, $date);
+    }
+
+    /**
+     * Get currency rate from database
+     *
+     * @param string $currencyCode Currency code
+     * @param string $date Date in Y-m-d format
+     * @return CurrencyRateDto|null
+     */
+    protected function getRateFromDatabase(string $currencyCode, string $date): ?CurrencyRateDto
+    {
         $currencyRate = CurrencyRate::query()
             ->whereHas('currency', function ($query) use ($currencyCode) {
                 $query->where('ccy', strtoupper($currencyCode));
@@ -47,6 +70,36 @@ class CbuCurrency
             nominal: $currencyRate->nominal,
             date: $currencyRate->date->format('Y-m-d'),
         );
+    }
+
+    /**
+     * Get currency rate from CBU API
+     *
+     * @param string $currencyCode Currency code
+     * @param string $date Date in Y-m-d format
+     * @return CurrencyRateDto|null
+     */
+    protected function getRateFromApi(string $currencyCode, string $date): ?CurrencyRateDto
+    {
+        try {
+            $rateData = $this->apiService->fetchRateFromApi($currencyCode, $date);
+
+            if (!$rateData) {
+                return null;
+            }
+
+            return new CurrencyRateDto(
+                currencyCode: $rateData['ccy'],
+                currencyName: $rateData['name_en'],
+                rate: (float) $rateData['rate'],
+                diff: (float) $rateData['diff'],
+                nominal: $rateData['nominal'],
+                date: $rateData['date'],
+            );
+        } catch (\Exception $e) {
+            // Return null if API request fails
+            return null;
+        }
     }
 
     /**
@@ -199,6 +252,23 @@ class CbuCurrency
     {
         $date = $date ?? now()->format('Y-m-d');
 
+        // Fetch from API if source is 'api'
+        if ($this->source === 'api') {
+            return $this->getAllRatesFromApi($date);
+        }
+
+        // Otherwise, fetch from database
+        return $this->getAllRatesFromDatabase($date);
+    }
+
+    /**
+     * Get all currency rates from database
+     *
+     * @param string $date Date in Y-m-d format
+     * @return array<CurrencyRateDto>
+     */
+    protected function getAllRatesFromDatabase(string $date): array
+    {
         $rates = CurrencyRate::query()
             ->where('date', $date)
             ->with('currency')
@@ -214,5 +284,32 @@ class CbuCurrency
                 date: $rate->date->format('Y-m-d'),
             );
         })->toArray();
+    }
+
+    /**
+     * Get all currency rates from CBU API
+     *
+     * @param string $date Date in Y-m-d format
+     * @return array<CurrencyRateDto>
+     */
+    protected function getAllRatesFromApi(string $date): array
+    {
+        try {
+            $ratesData = $this->apiService->fetchAllRatesFromApi($date);
+
+            return array_map(function ($rateData) {
+                return new CurrencyRateDto(
+                    currencyCode: $rateData['ccy'],
+                    currencyName: $rateData['name_en'],
+                    rate: (float) $rateData['rate'],
+                    diff: (float) $rateData['diff'],
+                    nominal: $rateData['nominal'],
+                    date: $rateData['date'],
+                );
+            }, $ratesData);
+        } catch (\Exception $e) {
+            // Return empty array if API request fails
+            return [];
+        }
     }
 }

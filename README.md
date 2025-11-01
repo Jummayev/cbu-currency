@@ -62,6 +62,9 @@ return [
 
     // BCMath calculation scale (decimal places)
     'scale' => env('CBU_SCALE', 2),
+
+    // Data source: 'database' or 'api'
+    'source' => env('CBU_SOURCE', 'database'),
 ];
 ```
 
@@ -74,6 +77,25 @@ CBU_BASE_URL=https://cbu.uz/ru/arkhiv-kursov-valyut/json
 CBU_CACHE_DURATION=60
 CBU_DEFAULT_CURRENCY=USD
 CBU_SCALE=2
+CBU_SOURCE=database
+```
+
+#### Data Source Configuration
+
+The `CBU_SOURCE` variable determines where currency rates are fetched from:
+
+- **`database`** (default): Fetches rates from the local database. This is faster and works offline after initial data sync. Requires running `php artisan cbu:fetch-rates` to populate the database.
+
+- **`api`**: Fetches rates directly from the CBU API in real-time. This provides live data but is slower and requires an internet connection for each request.
+
+**Example usage:**
+
+```env
+# Use database (recommended for production)
+CBU_SOURCE=database
+
+# Use live API (useful for always getting fresh data)
+CBU_SOURCE=api
 ```
 
 ## Usage
