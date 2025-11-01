@@ -4,6 +4,8 @@ namespace Cbu\Currency;
 
 use Cbu\Currency\DTOs\ConversionResultDto;
 use Cbu\Currency\DTOs\CurrencyRateDto;
+use Cbu\Currency\Enums\CurrencyCode;
+use Cbu\Currency\Enums\SourceType;
 use Cbu\Currency\Models\Currency;
 use Cbu\Currency\Models\CurrencyRate;
 use Cbu\Currency\Services\CbuApiService;
@@ -22,23 +24,41 @@ class CbuCurrency
     }
 
     /**
+     * Set the data source for currency operations
+     *
+     * @param SourceType|string $source Data source ('database' or 'api')
+     * @return self
+     */
+    public function source(SourceType|string $source): self
+    {
+        $sourceValue = $source instanceof SourceType ? $source->value : $source;
+
+        // Create a new instance with the specified source
+        $instance = clone $this;
+        $instance->source = $sourceValue;
+
+        return $instance;
+    }
+
+    /**
      * Get currency rate by code and date
      *
-     * @param string $currencyCode Currency code (e.g., USD, EUR)
+     * @param CurrencyCode|string $currencyCode Currency code (e.g., USD, EUR) or CurrencyCode enum
      * @param string|null $date Date in Y-m-d format, null for today
      * @return CurrencyRateDto|null
      */
-    public function getRate(string $currencyCode, ?string $date = null): ?CurrencyRateDto
+    public function getRate(CurrencyCode|string $currencyCode, ?string $date = null): ?CurrencyRateDto
     {
         $date = $date ?? now()->format('Y-m-d');
+        $currencyCodeValue = $currencyCode instanceof CurrencyCode ? $currencyCode->value : $currencyCode;
 
         // Fetch from API if source is 'api'
         if ($this->source === 'api') {
-            return $this->getRateFromApi($currencyCode, $date);
+            return $this->getRateFromApi($currencyCodeValue, $date);
         }
 
         // Otherwise, fetch from database
-        return $this->getRateFromDatabase($currencyCode, $date);
+        return $this->getRateFromDatabase($currencyCodeValue, $date);
     }
 
     /**
@@ -105,17 +125,19 @@ class CbuCurrency
     /**
      * Convert from one currency to another
      *
-     * @param string $fromCurrency Source currency code
-     * @param string $toCurrency Target currency code
+     * @param CurrencyCode|string $fromCurrency Source currency code or CurrencyCode enum
+     * @param CurrencyCode|string $toCurrency Target currency code or CurrencyCode enum
      * @param float $amount Amount to convert
      * @param string|null $date Date in Y-m-d format, null for today
      * @return ConversionResultDto|null
      */
-    public function convert(string $fromCurrency, string $toCurrency, float $amount, ?string $date = null): ?ConversionResultDto
+    public function convert(CurrencyCode|string $fromCurrency, CurrencyCode|string $toCurrency, float $amount, ?string $date = null): ?ConversionResultDto
     {
         $date = $date ?? now()->format('Y-m-d');
-        $fromCurrency = strtoupper($fromCurrency);
-        $toCurrency = strtoupper($toCurrency);
+        $fromCurrencyValue = $fromCurrency instanceof CurrencyCode ? $fromCurrency->value : $fromCurrency;
+        $toCurrencyValue = $toCurrency instanceof CurrencyCode ? $toCurrency->value : $toCurrency;
+        $fromCurrency = strtoupper($fromCurrencyValue);
+        $toCurrency = strtoupper($toCurrencyValue);
 
         // If same currency, return same amount
         if ($fromCurrency === $toCurrency) {
@@ -179,15 +201,16 @@ class CbuCurrency
     /**
      * Convert from foreign currency to UZS
      *
-     * @param string $currencyCode Source currency code
+     * @param CurrencyCode|string $currencyCode Source currency code or CurrencyCode enum
      * @param float $amount Amount in foreign currency
      * @param string|null $date Date in Y-m-d format, null for today
      * @return ConversionResultDto|null
      */
-    public function toUzs(string $currencyCode, float $amount, ?string $date = null): ?ConversionResultDto
+    public function toUzs(CurrencyCode|string $currencyCode, float $amount, ?string $date = null): ?ConversionResultDto
     {
         $date = $date ?? now()->format('Y-m-d');
-        $currencyCode = strtoupper($currencyCode);
+        $currencyCodeValue = $currencyCode instanceof CurrencyCode ? $currencyCode->value : $currencyCode;
+        $currencyCode = strtoupper($currencyCodeValue);
 
         $rateDto = $this->getRate($currencyCode, $date);
 
@@ -212,15 +235,16 @@ class CbuCurrency
     /**
      * Convert from UZS to foreign currency
      *
-     * @param string $currencyCode Target currency code
+     * @param CurrencyCode|string $currencyCode Target currency code or CurrencyCode enum
      * @param float $amount Amount in UZS
      * @param string|null $date Date in Y-m-d format, null for today
      * @return ConversionResultDto|null
      */
-    public function fromUzs(string $currencyCode, float $amount, ?string $date = null): ?ConversionResultDto
+    public function fromUzs(CurrencyCode|string $currencyCode, float $amount, ?string $date = null): ?ConversionResultDto
     {
         $date = $date ?? now()->format('Y-m-d');
-        $currencyCode = strtoupper($currencyCode);
+        $currencyCodeValue = $currencyCode instanceof CurrencyCode ? $currencyCode->value : $currencyCode;
+        $currencyCode = strtoupper($currencyCodeValue);
 
         $rateDto = $this->getRate($currencyCode, $date);
 
