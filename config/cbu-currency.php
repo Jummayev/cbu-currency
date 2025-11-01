@@ -40,4 +40,16 @@ return [
     |
     */
     'scale' => env('CBU_SCALE', 2),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Data Source
+    |--------------------------------------------------------------------------
+    |
+    | Determines where to fetch currency rates from:
+    | - 'database': Fetch rates from local database (default, faster)
+    | - 'api': Fetch rates directly from CBU API (live data, slower)
+    |
+    */
+    'source' => env('CBU_SOURCE', 'database'),
 ];
